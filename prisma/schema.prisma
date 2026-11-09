@@ -1,0 +1,107 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum InstanceStatus {
+  PROVISIONING
+  RUNNING
+  STOPPING
+  STOPPED
+  EXPIRED
+  FAILED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  username     String       @unique
+  email        String       @unique
+  displayName  String
+  role         Role         @default(USER)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  instances    Instance[]
+  submissions  Submission[]
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Challenge {
+  id           String       @id @default(uuid())
+  slug         String       @unique
+  name         String
+  description  String
+  category     String       @default("Web Security")
+  difficulty   String       @default("Medium")
+  points       Int          @default(500)
+  dockerImage  String       @default("bkimminich/juice-shop:v16.0.0")
+  internalPort Int          @default(3000)
+  createdAt    DateTime     @default(now())
+  instances    Instance[]
+  submissions  Submission[]
+
+  @@map("challenges")
+}
+
+model Instance {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId   String
+  challenge     Challenge      @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  
+  containerId   String?        @unique
+  containerName String         @unique
+  subdomain     String         @unique
+  hostUrl       String
+  remoteNodeIp  String
+  internalPort  Int            @default(3000)
+  status        InstanceStatus @default(PROVISIONING)
+  
+  createdAt     DateTime       @default(now())
+  expiresAt     DateTime
+  stoppedAt     DateTime?
+
+  @@index([userId, status])
+  @@index([expiresAt, status])
+  @@map("instances")
+}
+
+model Submission {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  flag        String
+  points      Int
+  solvedAt    DateTime  @default(now())
+
+  @@unique([userId, challengeId])
+  @@map("submissions")
+}
