@@ -22,11 +22,15 @@ export const getOverview = async (_req: Request, res: Response): Promise<void> =
     ]);
 
     res.status(200).json({
+      totalUsers,
+      activeInstances,
+      challengesCount,
+      recentSubmissions: recentSubmissions.length,
       overview: {
         totalUsers,
         activeInstances,
         challengesCount,
-        recentSubmissions,
+        recentSubmissions: recentSubmissions.length,
       },
     });
   } catch (err) {
@@ -59,7 +63,7 @@ export const listAllInstances = async (_req: Request, res: Response): Promise<vo
       }),
     );
 
-    res.status(200).json({ instances: enriched });
+    res.status(200).json(enriched);
   } catch (err) {
     console.error('[AdminController] listAllInstances error:', err);
     res.status(500).json({ error: 'Failed to list instances' });
@@ -117,15 +121,21 @@ export const getScoreboard = async (_req: Request, res: Response): Promise<void>
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    const ranked = scoreboard.map((entry, index) => ({
-      rank: index + 1,
-      userId: entry.userId,
-      user: userMap.get(entry.userId) ?? null,
-      totalPoints: entry._sum.points ?? 0,
-      challengesSolved: entry._count.challengeId,
-    }));
+    const ranked = scoreboard.map((entry, index) => {
+      const u = userMap.get(entry.userId);
+      return {
+        rank: index + 1,
+        userId: entry.userId,
+        username: u?.username ?? 'anonymous',
+        displayName: u?.displayName ?? u?.username ?? 'Anonymous',
+        user: u ?? null,
+        totalPoints: entry._sum.points ?? 0,
+        solvedCount: entry._count.challengeId,
+        challengesSolved: entry._count.challengeId,
+      };
+    });
 
-    res.status(200).json({ scoreboard: ranked });
+    res.status(200).json(ranked);
   } catch (err) {
     console.error('[AdminController] getScoreboard error:', err);
     res.status(500).json({ error: 'Failed to retrieve scoreboard' });

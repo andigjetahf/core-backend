@@ -6,6 +6,6 @@ until nc -z $(echo $DATABASE_URL | sed 's|.*@||' | sed 's|/.*||' | sed 's|:| |')
 done
 echo "[Entrypoint] PostgreSQL is up."
 echo "[Entrypoint] Running Prisma migrations..."
-npx prisma db push --skip-generate
+npx prisma db push --skip-generate --accept-data-loss
 echo "[Entrypoint] Starting core backend..."
 exec node dist/index.js

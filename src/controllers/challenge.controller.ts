@@ -19,7 +19,7 @@ export const listChallenges = async (_req: Request, res: Response): Promise<void
       },
     });
 
-    res.status(200).json({ challenges });
+    res.status(200).json(challenges);
   } catch (err) {
     console.error('[ChallengeController] listChallenges error:', err);
     res.status(500).json({ error: 'Failed to list challenges' });

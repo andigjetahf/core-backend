@@ -29,13 +29,12 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
   const token = authHeader.slice(7);
 
   try {
-    const payload = jwt.verify(token, config.jwtSharedSecret, {
-      issuer: 'ctf-auth-vm1',
-    }) as JwtPayload;
+    const payload = jwt.verify(token, config.jwtSharedSecret) as JwtPayload;
 
     req.user = payload;
     next();
   } catch (err) {
+    console.warn('[AuthMiddleware] JWT verification failed:', err instanceof Error ? err.message : err);
     if (err instanceof jwt.TokenExpiredError) {
       res.status(401).json({ error: 'Token expired' });
     } else if (err instanceof jwt.JsonWebTokenError) {
