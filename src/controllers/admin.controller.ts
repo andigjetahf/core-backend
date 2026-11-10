@@ -3,6 +3,12 @@ import { InstanceStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { dockerService } from '../services/docker.service';
 
+interface UserBasic {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
 export const getOverview = async (_req: Request, res: Response): Promise<void> => {
   try {
     const [totalUsers, activeInstances, challengesCount, recentSubmissions] = await Promise.all([
@@ -51,7 +57,7 @@ export const listAllInstances = async (_req: Request, res: Response): Promise<vo
 
     // Enrich running instances with live Docker stats
     const enriched = await Promise.all(
-      instances.map(async (instance) => {
+      instances.map(async (instance: any) => {
         let stats = null;
         if (
           instance.status === InstanceStatus.RUNNING &&
@@ -113,15 +119,18 @@ export const getScoreboard = async (_req: Request, res: Response): Promise<void>
     });
 
     // Enrich with user data
-    const userIds = scoreboard.map((s) => s.userId);
-    const users = await prisma.user.findMany({
+    const userIds = scoreboard.map((s: { userId: string }) => s.userId);
+    const users: UserBasic[] = await prisma.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, username: true, displayName: true },
     });
 
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map<string, UserBasic>();
+    for (const u of users) {
+      userMap.set(u.id, u);
+    }
 
-    const ranked = scoreboard.map((entry, index) => {
+    const ranked = scoreboard.map((entry: any, index: number) => {
       const u = userMap.get(entry.userId);
       return {
         rank: index + 1,
@@ -129,9 +138,9 @@ export const getScoreboard = async (_req: Request, res: Response): Promise<void>
         username: u?.username ?? 'anonymous',
         displayName: u?.displayName ?? u?.username ?? 'Anonymous',
         user: u ?? null,
-        totalPoints: entry._sum.points ?? 0,
-        solvedCount: entry._count.challengeId,
-        challengesSolved: entry._count.challengeId,
+        totalPoints: entry._sum?.points ?? 0,
+        solvedCount: entry._count?.challengeId ?? 0,
+        challengesSolved: entry._count?.challengeId ?? 0,
       };
     });
 
