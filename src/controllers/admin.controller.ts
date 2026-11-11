@@ -90,21 +90,22 @@ export const killInstance = async (req: Request, res: Response): Promise<void> =
     }
 
     if (instance.containerId) {
-      await dockerService.destroyInstance(instance.containerId);
+      try {
+        await dockerService.destroyInstance(instance.containerId);
+      } catch (dockerErr) {
+        console.warn(`[AdminController] Docker destroy warning:`, dockerErr);
+      }
     }
 
-    const updated = await prisma.instance.update({
+    // Permanently remove the instance record so it does not reappear on refresh
+    await prisma.instance.delete({
       where: { id },
-      data: {
-        status: InstanceStatus.STOPPED,
-        stoppedAt: new Date(),
-      },
     });
 
-    res.status(200).json({ success: true, instance: updated });
+    res.status(200).json({ success: true, message: 'Instance deleted' });
   } catch (err) {
     console.error('[AdminController] killInstance error:', err);
-    res.status(500).json({ error: 'Failed to kill instance' });
+    res.status(500).json({ error: 'Failed to kill/delete instance' });
   }
 };
 
