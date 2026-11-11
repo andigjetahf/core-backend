@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { InstanceStatus } from '@prisma/client';
+import { InstanceStatus, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { dockerService } from '../services/docker.service';
 
@@ -149,5 +149,163 @@ export const getScoreboard = async (_req: Request, res: Response): Promise<void>
   } catch (err) {
     console.error('[AdminController] getScoreboard error:', err);
     res.status(500).json({ error: 'Failed to retrieve scoreboard' });
+  }
+};
+
+export const listUsers = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: {
+            instances: true,
+            submissions: true,
+          },
+        },
+      },
+    });
+
+    const enriched = users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      displayName: u.displayName,
+      role: u.role,
+      createdAt: u.createdAt,
+      updatedAt: u.updatedAt,
+      instancesCount: u._count.instances,
+      solvedCount: u._count.submissions,
+    }));
+
+    res.status(200).json(enriched);
+  } catch (err) {
+    console.error('[AdminController] listUsers error:', err);
+    res.status(500).json({ error: 'Failed to retrieve users' });
+  }
+};
+
+export const createUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { username, email, displayName, role } = req.body;
+    if (!username || !email || !displayName) {
+      res.status(400).json({ error: 'Username, email and display name are required' });
+      return;
+    }
+
+    const trimmedUsername = String(username).trim();
+    const trimmedEmail = String(email).trim().toLowerCase();
+    const trimmedDisplayName = String(displayName).trim();
+
+    const existing = await prisma.user.findFirst({
+      where: {
+        OR: [{ username: trimmedUsername }, { email: trimmedEmail }],
+      },
+    });
+
+    if (existing) {
+      res.status(409).json({ error: 'Username or email already exists' });
+      return;
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        username: trimmedUsername,
+        email: trimmedEmail,
+        displayName: trimmedDisplayName,
+        role: role === 'ADMIN' ? Role.ADMIN : Role.USER,
+      },
+    });
+
+    res.status(201).json(newUser);
+  } catch (err) {
+    console.error('[AdminController] createUser error:', err);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+};
+
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { username, email, displayName, role } = req.body;
+
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const trimmedUsername = username !== undefined ? String(username).trim() : undefined;
+    const trimmedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
+    const trimmedDisplayName = displayName !== undefined ? String(displayName).trim() : undefined;
+
+    if (trimmedUsername && trimmedUsername !== existing.username) {
+      const conflict = await prisma.user.findUnique({ where: { username: trimmedUsername } });
+      if (conflict) {
+        res.status(409).json({ error: 'Username is already taken' });
+        return;
+      }
+    }
+
+    if (trimmedEmail && trimmedEmail !== existing.email) {
+      const conflict = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+      if (conflict) {
+        res.status(409).json({ error: 'Email is already taken' });
+        return;
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(trimmedUsername ? { username: trimmedUsername } : {}),
+        ...(trimmedEmail ? { email: trimmedEmail } : {}),
+        ...(trimmedDisplayName ? { displayName: trimmedDisplayName } : {}),
+        ...(role !== undefined ? { role: role === 'ADMIN' ? Role.ADMIN : Role.USER } : {}),
+      },
+    });
+
+    res.status(200).json(updated);
+  } catch (err) {
+    console.error('[AdminController] updateUser error:', err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (req.user?.id === id) {
+      res.status(400).json({ error: 'Cannot delete your own account' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { instances: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    for (const inst of user.instances) {
+      if (inst.containerId) {
+        try {
+          await dockerService.destroyInstance(inst.containerId);
+        } catch (dockerErr) {
+          console.warn(`[AdminController] Docker destroy warning for user ${id}:`, dockerErr);
+        }
+      }
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    res.status(200).json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('[AdminController] deleteUser error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 };
