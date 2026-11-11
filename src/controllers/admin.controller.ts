@@ -154,17 +154,28 @@ export const getScoreboard = async (_req: Request, res: Response): Promise<void>
 
 export const listUsers = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            instances: true,
-            submissions: true,
+    const [users, pointsByUser] = await Promise.all([
+      prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              instances: true,
+              submissions: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.submission.groupBy({
+        by: ['userId'],
+        _sum: { points: true },
+      }),
+    ]);
+
+    const pointsMap = new Map<string, number>();
+    for (const p of pointsByUser) {
+      pointsMap.set(p.userId, p._sum.points ?? 0);
+    }
 
     const enriched = users.map((u) => ({
       id: u.id,
@@ -176,6 +187,7 @@ export const listUsers = async (_req: Request, res: Response): Promise<void> => 
       updatedAt: u.updatedAt,
       instancesCount: u._count.instances,
       solvedCount: u._count.submissions,
+      totalPoints: pointsMap.get(u.id) ?? 0,
     }));
 
     res.status(200).json(enriched);
