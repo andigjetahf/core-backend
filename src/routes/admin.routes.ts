@@ -10,6 +10,10 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  listAdminChallenges,
+  createChallenge,
+  updateChallenge,
+  deleteChallenge,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -26,5 +30,11 @@ router.get('/users', listUsers);
 router.post('/users', createUser);
 router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
+
+// Challenge Management CRUD
+router.get('/challenges', listAdminChallenges);
+router.post('/challenges', createChallenge);
+router.put('/challenges/:id', updateChallenge);
+router.delete('/challenges/:id', deleteChallenge);
 
 export default router;

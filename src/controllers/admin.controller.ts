@@ -321,3 +321,177 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: 'Failed to delete user' });
   }
 };
+
+export const listAdminChallenges = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const challenges = await prisma.challenge.findMany({
+      orderBy: [{ category: 'asc' }, { difficulty: 'asc' }, { name: 'asc' }],
+      include: {
+        _count: {
+          select: {
+            instances: true,
+            submissions: true,
+          },
+        },
+      },
+    });
+
+    const enriched = challenges.map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      name: c.name,
+      description: c.description,
+      category: c.category,
+      difficulty: c.difficulty,
+      points: c.points,
+      dockerImage: c.dockerImage,
+      internalPort: c.internalPort,
+      createdAt: c.createdAt,
+      instancesCount: c._count.instances,
+      solvedCount: c._count.submissions,
+    }));
+
+    res.status(200).json(enriched);
+  } catch (err) {
+    console.error('[AdminController] listAdminChallenges error:', err);
+    res.status(500).json({ error: 'Failed to retrieve challenges' });
+  }
+};
+
+export const createChallenge = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      name,
+      slug,
+      description,
+      category,
+      difficulty,
+      points,
+      dockerImage,
+      internalPort,
+    } = req.body;
+
+    if (!name || !description) {
+      res.status(400).json({ error: 'Name and description are required' });
+      return;
+    }
+
+    const trimmedName = String(name).trim();
+    const computedSlug = slug
+      ? String(slug).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      : trimmedName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    const existing = await prisma.challenge.findUnique({
+      where: { slug: computedSlug },
+    });
+
+    if (existing) {
+      res.status(409).json({ error: `Challenge with slug '${computedSlug}' already exists` });
+      return;
+    }
+
+    const newChallenge = await prisma.challenge.create({
+      data: {
+        name: trimmedName,
+        slug: computedSlug,
+        description: String(description).trim(),
+        category: category ? String(category).trim() : 'Web Security',
+        difficulty: difficulty ? String(difficulty).trim() : 'Medium',
+        points: points !== undefined && !isNaN(parseInt(points, 10)) ? parseInt(points, 10) : 500,
+        dockerImage: dockerImage ? String(dockerImage).trim() : 'bkimminich/juice-shop:v16.0.0',
+        internalPort: internalPort !== undefined && !isNaN(parseInt(internalPort, 10)) ? parseInt(internalPort, 10) : 3000,
+      },
+    });
+
+    res.status(201).json(newChallenge);
+  } catch (err) {
+    console.error('[AdminController] createChallenge error:', err);
+    res.status(500).json({ error: 'Failed to create challenge' });
+  }
+};
+
+export const updateChallenge = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      slug,
+      description,
+      category,
+      difficulty,
+      points,
+      dockerImage,
+      internalPort,
+    } = req.body;
+
+    const existing = await prisma.challenge.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Challenge not found' });
+      return;
+    }
+
+    const trimmedSlug = slug
+      ? String(slug).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      : undefined;
+
+    if (trimmedSlug && trimmedSlug !== existing.slug) {
+      const conflict = await prisma.challenge.findUnique({ where: { slug: trimmedSlug } });
+      if (conflict) {
+        res.status(409).json({ error: `Challenge with slug '${trimmedSlug}' already exists` });
+        return;
+      }
+    }
+
+    const updated = await prisma.challenge.update({
+      where: { id },
+      data: {
+        ...(name !== undefined ? { name: String(name).trim() } : {}),
+        ...(trimmedSlug !== undefined ? { slug: trimmedSlug } : {}),
+        ...(description !== undefined ? { description: String(description).trim() } : {}),
+        ...(category !== undefined ? { category: String(category).trim() } : {}),
+        ...(difficulty !== undefined ? { difficulty: String(difficulty).trim() } : {}),
+        ...(points !== undefined && !isNaN(parseInt(points, 10)) ? { points: parseInt(points, 10) } : {}),
+        ...(dockerImage !== undefined ? { dockerImage: String(dockerImage).trim() } : {}),
+        ...(internalPort !== undefined && !isNaN(parseInt(internalPort, 10)) ? { internalPort: parseInt(internalPort, 10) } : {}),
+      },
+    });
+
+    res.status(200).json(updated);
+  } catch (err) {
+    console.error('[AdminController] updateChallenge error:', err);
+    res.status(500).json({ error: 'Failed to update challenge' });
+  }
+};
+
+export const deleteChallenge = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const challenge = await prisma.challenge.findUnique({
+      where: { id },
+      include: { instances: true },
+    });
+
+    if (!challenge) {
+      res.status(404).json({ error: 'Challenge not found' });
+      return;
+    }
+
+    for (const inst of challenge.instances) {
+      if (inst.containerId) {
+        try {
+          await dockerService.destroyInstance(inst.containerId);
+        } catch (dockerErr) {
+          console.warn(`[AdminController] Docker destroy warning for challenge ${id}:`, dockerErr);
+        }
+      }
+    }
+
+    await prisma.challenge.delete({ where: { id } });
+
+    res.status(200).json({ success: true, message: 'Challenge deleted successfully' });
+  } catch (err) {
+    console.error('[AdminController] deleteChallenge error:', err);
+    res.status(500).json({ error: 'Failed to delete challenge' });
+  }
+};
