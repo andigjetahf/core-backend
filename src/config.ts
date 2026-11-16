@@ -22,6 +22,7 @@ export const config = {
   jwtSharedSecret: getEnv('JWT_SHARED_SECRET', 'distributed-ctf-jwt-secret-shared-across-vms-2026!'),
   databaseUrl: getEnv('DATABASE_URL', 'postgresql://ctf_admin:SuperSecretCtfPass123!@192.168.200.14:5432/ctf_db'),
   vm5DockerHost: getEnv('VM5_DOCKER_HOST', 'tcp://192.168.200.15:2375'),
+  challengeHostUrl: getEnv('CHALLENGE_HOST_URL', 'http://192.168.200.15:5050'),
   vm5TraefikNetwork: getEnv('VM5_TRAEFIK_NETWORK', 'traefik_net'),
   ctfDomain: getEnv('CTF_DOMAIN', 'ctf.local'),
   instanceTtlMinutes: getEnvInt('INSTANCE_TTL_MINUTES', 60),

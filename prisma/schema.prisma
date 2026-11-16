@@ -52,18 +52,29 @@ model Session {
 }
 
 model Challenge {
-  id           String       @id @default(uuid())
-  slug         String       @unique
-  name         String
-  description  String
-  category     String       @default("Web Security")
-  difficulty   String       @default("Medium")
-  points       Int          @default(500)
-  dockerImage  String       @default("bkimminich/juice-shop:v16.0.0")
-  internalPort Int          @default(3000)
-  createdAt    DateTime     @default(now())
-  instances    Instance[]
-  submissions  Submission[]
+  id             String       @id @default(uuid())
+  slug           String       @unique
+  name           String
+  description    String
+  category       String       @default("Web Security")
+  difficulty     String       @default("Medium")
+  points         Int          @default(500)
+  
+  // Runtime & Orchestration
+  runtimeType    String       @default("PROXMOX_CT") // PROXMOX_CT, PROXMOX_VM, DOCKER
+  proxmoxNode    String       @default("pms1")       // pms1, pms2, pms3
+  templateId     Int          @default(101)          // Source VMID/CTID to clone from
+  cpuCores       Int          @default(1)            // CPU cores allocated
+  ramMB          Int          @default(1024)         // RAM in MB
+  diskGB         Int          @default(8)            // Disk size in GB
+  storagePool    String       @default("local-lvm")  // Storage pool on target node
+  connectionType String       @default("HTTP")       // HTTP, SSH, TCP
+  
+  dockerImage    String       @default("bkimminich/juice-shop:v16.0.0")
+  internalPort   Int          @default(3000)
+  createdAt      DateTime     @default(now())
+  instances      Instance[]
+  submissions    Submission[]
 
   @@map("challenges")
 }
@@ -75,11 +86,17 @@ model Instance {
   challengeId   String
   challenge     Challenge      @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   
+  // Proxmox / Runtime specific identifiers
+  vmid          Int?           @unique
+  proxmoxNode   String?
+  ipAddress     String?
+  connectionUrl String?
+
   containerId   String?        @unique
   containerName String         @unique
   subdomain     String         @unique
   hostUrl       String
-  remoteNodeIp  String
+  remoteNodeIp  String         // IP address of Challenge Host or Proxmox Node
   internalPort  Int            @default(3000)
   status        InstanceStatus @default(PROVISIONING)
   

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { InstanceStatus, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { dockerService } from '../services/docker.service';
+import { challengeHostService } from '../services/challenge-host.service';
 
 interface UserBasic {
   id: string;
@@ -89,11 +90,16 @@ export const killInstance = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    if (instance.containerId) {
+    if (instance.containerId || instance.vmid) {
       try {
-        await dockerService.destroyInstance(instance.containerId);
-      } catch (dockerErr) {
-        console.warn(`[AdminController] Docker destroy warning:`, dockerErr);
+        await challengeHostService.deprovision({
+          vmid: instance.vmid,
+          proxmoxNode: instance.proxmoxNode,
+          containerId: instance.containerId,
+          containerName: instance.containerName,
+        });
+      } catch (deprovErr) {
+        console.warn(`[AdminController] Deprovision warning:`, deprovErr);
       }
     }
 
@@ -304,11 +310,16 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     }
 
     for (const inst of user.instances) {
-      if (inst.containerId) {
+      if (inst.containerId || inst.vmid) {
         try {
-          await dockerService.destroyInstance(inst.containerId);
+          await challengeHostService.deprovision({
+            vmid: inst.vmid,
+            proxmoxNode: inst.proxmoxNode,
+            containerId: inst.containerId,
+            containerName: inst.containerName,
+          });
         } catch (dockerErr) {
-          console.warn(`[AdminController] Docker destroy warning for user ${id}:`, dockerErr);
+          console.warn(`[AdminController] Deprovision warning for user ${id}:`, dockerErr);
         }
       }
     }
@@ -344,6 +355,14 @@ export const listAdminChallenges = async (_req: Request, res: Response): Promise
       category: c.category,
       difficulty: c.difficulty,
       points: c.points,
+      runtimeType: c.runtimeType,
+      proxmoxNode: c.proxmoxNode,
+      templateId: c.templateId,
+      cpuCores: c.cpuCores,
+      ramMB: c.ramMB,
+      diskGB: c.diskGB,
+      storagePool: c.storagePool,
+      connectionType: c.connectionType,
       dockerImage: c.dockerImage,
       internalPort: c.internalPort,
       createdAt: c.createdAt,
@@ -367,6 +386,14 @@ export const createChallenge = async (req: Request, res: Response): Promise<void
       category,
       difficulty,
       points,
+      runtimeType,
+      proxmoxNode,
+      templateId,
+      cpuCores,
+      ramMB,
+      diskGB,
+      storagePool,
+      connectionType,
       dockerImage,
       internalPort,
     } = req.body;
@@ -398,6 +425,14 @@ export const createChallenge = async (req: Request, res: Response): Promise<void
         category: category ? String(category).trim() : 'Web Security',
         difficulty: difficulty ? String(difficulty).trim() : 'Medium',
         points: points !== undefined && !isNaN(parseInt(points, 10)) ? parseInt(points, 10) : 500,
+        runtimeType: runtimeType ? String(runtimeType).trim() : 'PROXMOX_CT',
+        proxmoxNode: proxmoxNode ? String(proxmoxNode).trim() : 'pms1',
+        templateId: templateId !== undefined && !isNaN(parseInt(templateId, 10)) ? parseInt(templateId, 10) : 101,
+        cpuCores: cpuCores !== undefined && !isNaN(parseInt(cpuCores, 10)) ? parseInt(cpuCores, 10) : 1,
+        ramMB: ramMB !== undefined && !isNaN(parseInt(ramMB, 10)) ? parseInt(ramMB, 10) : 1024,
+        diskGB: diskGB !== undefined && !isNaN(parseInt(diskGB, 10)) ? parseInt(diskGB, 10) : 8,
+        storagePool: storagePool ? String(storagePool).trim() : 'local-lvm',
+        connectionType: connectionType ? String(connectionType).trim() : 'HTTP',
         dockerImage: dockerImage ? String(dockerImage).trim() : 'bkimminich/juice-shop:v16.0.0',
         internalPort: internalPort !== undefined && !isNaN(parseInt(internalPort, 10)) ? parseInt(internalPort, 10) : 3000,
       },
@@ -420,6 +455,14 @@ export const updateChallenge = async (req: Request, res: Response): Promise<void
       category,
       difficulty,
       points,
+      runtimeType,
+      proxmoxNode,
+      templateId,
+      cpuCores,
+      ramMB,
+      diskGB,
+      storagePool,
+      connectionType,
       dockerImage,
       internalPort,
     } = req.body;
@@ -451,6 +494,14 @@ export const updateChallenge = async (req: Request, res: Response): Promise<void
         ...(category !== undefined ? { category: String(category).trim() } : {}),
         ...(difficulty !== undefined ? { difficulty: String(difficulty).trim() } : {}),
         ...(points !== undefined && !isNaN(parseInt(points, 10)) ? { points: parseInt(points, 10) } : {}),
+        ...(runtimeType !== undefined ? { runtimeType: String(runtimeType).trim() } : {}),
+        ...(proxmoxNode !== undefined ? { proxmoxNode: String(proxmoxNode).trim() } : {}),
+        ...(templateId !== undefined && !isNaN(parseInt(templateId, 10)) ? { templateId: parseInt(templateId, 10) } : {}),
+        ...(cpuCores !== undefined && !isNaN(parseInt(cpuCores, 10)) ? { cpuCores: parseInt(cpuCores, 10) } : {}),
+        ...(ramMB !== undefined && !isNaN(parseInt(ramMB, 10)) ? { ramMB: parseInt(ramMB, 10) } : {}),
+        ...(diskGB !== undefined && !isNaN(parseInt(diskGB, 10)) ? { diskGB: parseInt(diskGB, 10) } : {}),
+        ...(storagePool !== undefined ? { storagePool: String(storagePool).trim() } : {}),
+        ...(connectionType !== undefined ? { connectionType: String(connectionType).trim() } : {}),
         ...(dockerImage !== undefined ? { dockerImage: String(dockerImage).trim() } : {}),
         ...(internalPort !== undefined && !isNaN(parseInt(internalPort, 10)) ? { internalPort: parseInt(internalPort, 10) } : {}),
       },
@@ -478,11 +529,16 @@ export const deleteChallenge = async (req: Request, res: Response): Promise<void
     }
 
     for (const inst of challenge.instances) {
-      if (inst.containerId) {
+      if (inst.containerId || inst.vmid) {
         try {
-          await dockerService.destroyInstance(inst.containerId);
+          await challengeHostService.deprovision({
+            vmid: inst.vmid,
+            proxmoxNode: inst.proxmoxNode,
+            containerId: inst.containerId,
+            containerName: inst.containerName,
+          });
         } catch (dockerErr) {
-          console.warn(`[AdminController] Docker destroy warning for challenge ${id}:`, dockerErr);
+          console.warn(`[AdminController] Deprovision warning for challenge ${id}:`, dockerErr);
         }
       }
     }
@@ -493,5 +549,18 @@ export const deleteChallenge = async (req: Request, res: Response): Promise<void
   } catch (err) {
     console.error('[AdminController] deleteChallenge error:', err);
     res.status(500).json({ error: 'Failed to delete challenge' });
+  }
+};
+
+export const getProxmoxNodes = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const nodes = [
+      { id: 'pms1', name: 'pms1 (Juice Shop / Challenge Hosts)', status: 'online' },
+      { id: 'pms2', name: 'pms2 (Platform Core & ChallengeHoste)', status: 'online' },
+      { id: 'pms3', name: 'pms3 (Wazuh SIEM Security)', status: 'online' },
+    ];
+    res.status(200).json(nodes);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve Proxmox nodes' });
   }
 };

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { InstanceStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { dockerService } from '../services/docker.service';
+import { challengeHostService } from '../services/challenge-host.service';
 import { config } from '../config';
 
 const ACTIVE_STATUSES: InstanceStatus[] = [InstanceStatus.PROVISIONING, InstanceStatus.RUNNING];
@@ -82,20 +83,25 @@ export const startMyInstance = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Pull image if not present (non-blocking warning on failure)
-    try {
-      await dockerService.ensureImage(challenge.dockerImage);
-    } catch (pullErr) {
-      console.warn('[InstanceController] Image pull warning (continuing):', pullErr);
-    }
-
-    // Spawn the container on VM 5
-    const spawnResult = await dockerService.spawnInstance(
+    // Provision via ChallengeHoste (delegates to Proxmox LXC/VM or Docker)
+    const spawnResult = await challengeHostService.provision(
       req.user.id,
       req.user.username,
-      challenge.id,
-      challenge.dockerImage,
-      challenge.internalPort,
+      {
+        id: challenge.id,
+        slug: challenge.slug,
+        name: challenge.name,
+        runtimeType: challenge.runtimeType || 'PROXMOX_CT',
+        proxmoxNode: challenge.proxmoxNode || 'pms1',
+        templateId: challenge.templateId || 101,
+        cpuCores: challenge.cpuCores || 1,
+        ramMB: challenge.ramMB || 1024,
+        diskGB: challenge.diskGB || 8,
+        storagePool: challenge.storagePool || 'local-lvm',
+        connectionType: challenge.connectionType || 'HTTP',
+        dockerImage: challenge.dockerImage,
+        internalPort: challenge.internalPort,
+      }
     );
 
     // Calculate TTL
@@ -106,26 +112,30 @@ export const startMyInstance = async (req: Request, res: Response): Promise<void
       data: {
         userId: req.user.id,
         challengeId: challenge.id,
+        vmid: spawnResult.vmid ?? undefined,
+        proxmoxNode: spawnResult.proxmoxNode ?? undefined,
+        ipAddress: spawnResult.ipAddress ?? undefined,
+        connectionUrl: spawnResult.connectionUrl ?? spawnResult.hostUrl,
         containerId: spawnResult.containerId,
         containerName: spawnResult.containerName,
         subdomain: spawnResult.subdomain,
         hostUrl: spawnResult.hostUrl,
-        remoteNodeIp: '192.168.200.15',
+        remoteNodeIp: spawnResult.proxmoxNode ? `${spawnResult.proxmoxNode}.ctf.local` : '192.168.200.15',
         internalPort: challenge.internalPort,
         status: InstanceStatus.RUNNING,
         expiresAt,
       },
       include: {
         challenge: {
-          select: { id: true, slug: true, name: true, category: true, difficulty: true, points: true },
+          select: { id: true, slug: true, name: true, category: true, difficulty: true, points: true, runtimeType: true, proxmoxNode: true },
         },
       },
     });
 
     res.status(201).json({ instance });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[InstanceController] startMyInstance error:', err);
-    res.status(500).json({ error: 'Failed to start instance' });
+    res.status(500).json({ error: 'Failed to start instance', details: err?.message });
   }
 };
 
@@ -141,6 +151,9 @@ export const stopMyInstance = async (req: Request, res: Response): Promise<void>
         userId: req.user.id,
         status: { in: ACTIVE_STATUSES },
       },
+      include: {
+        challenge: true,
+      },
     });
 
     if (!instance) {
@@ -148,9 +161,14 @@ export const stopMyInstance = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (instance.containerId) {
-      await dockerService.destroyInstance(instance.containerId);
-    }
+    // Deprovision via ChallengeHoste (stops & cleans up Proxmox VM/CT or Docker)
+    await challengeHostService.deprovision({
+      vmid: instance.vmid,
+      proxmoxNode: instance.proxmoxNode,
+      runtimeType: instance.challenge?.runtimeType,
+      containerId: instance.containerId,
+      containerName: instance.containerName,
+    });
 
     const updated = await prisma.instance.update({
       where: { id: instance.id },

@@ -14,6 +14,7 @@ import {
   createChallenge,
   updateChallenge,
   deleteChallenge,
+  getProxmoxNodes,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -36,5 +37,6 @@ router.get('/challenges', listAdminChallenges);
 router.post('/challenges', createChallenge);
 router.put('/challenges/:id', updateChallenge);
 router.delete('/challenges/:id', deleteChallenge);
+router.get('/proxmox/nodes', getProxmoxNodes);
 
 export default router;
