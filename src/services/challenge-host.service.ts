@@ -23,7 +23,7 @@ export class ChallengeHostService {
   }
 
   /**
-   * Delegates provisioning of Proxmox CT/VM or Docker container to ChallengeHoste (VM 5)
+   * Delegates provisioning of Proxmox CT/VM or Docker container to ChallengeHoste (VM 5, 192.168.200.15:5050)
    */
   async provision(
     userId: string,
