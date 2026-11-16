@@ -61,6 +61,7 @@ async function seedDatabase(): Promise<void> {
         category: 'Web Security',
         difficulty: 'Medium',
         points: 500,
+        runtimeType: 'DOCKER',
         dockerImage: 'bkimminich/juice-shop:v16.0.0',
         internalPort: 3000,
       },
@@ -70,6 +71,7 @@ async function seedDatabase(): Promise<void> {
           'OWASP Juice Shop is probably the most modern and sophisticated insecure web application. ' +
           'It can be used in security trainings, awareness demos, CTFs and as a guinea pig for security tools. ' +
           'It encompasses vulnerabilities from the entire OWASP Top Ten along with many other security flaws found in real-world applications.',
+        runtimeType: 'DOCKER',
         dockerImage: 'bkimminich/juice-shop:v16.0.0',
         internalPort: 3000,
       },

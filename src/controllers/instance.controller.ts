@@ -91,7 +91,7 @@ export const startMyInstance = async (req: Request, res: Response): Promise<void
         id: challenge.id,
         slug: challenge.slug,
         name: challenge.name,
-        runtimeType: challenge.runtimeType || 'PROXMOX_CT',
+        runtimeType: challenge.runtimeType || 'DOCKER',
         proxmoxNode: challenge.proxmoxNode || 'pms1',
         templateId: challenge.templateId || 101,
         cpuCores: challenge.cpuCores || 1,
@@ -107,6 +107,10 @@ export const startMyInstance = async (req: Request, res: Response): Promise<void
     // Calculate TTL
     const expiresAt = new Date(Date.now() + config.instanceTtlMinutes * 60 * 1000);
 
+    // containerId is required by the DB unique constraint — use containerName as fallback
+    // for Proxmox runtimes that return a synthetic "ct-node-vmid" string
+    const resolvedContainerId = spawnResult.containerId || null;
+
     // Record in DB
     const instance = await prisma.instance.create({
       data: {
@@ -116,7 +120,7 @@ export const startMyInstance = async (req: Request, res: Response): Promise<void
         proxmoxNode: spawnResult.proxmoxNode ?? undefined,
         ipAddress: spawnResult.ipAddress ?? undefined,
         connectionUrl: spawnResult.connectionUrl ?? spawnResult.hostUrl,
-        containerId: spawnResult.containerId,
+        containerId: resolvedContainerId ?? undefined,
         containerName: spawnResult.containerName,
         subdomain: spawnResult.subdomain,
         hostUrl: spawnResult.hostUrl,
