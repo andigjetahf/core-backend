@@ -62,15 +62,20 @@ export class ChallengeHostService {
         `[ChallengeHostService] ChallengeHoste API call failed (${err?.message}). Attempting Docker fallback if applicable...`
       );
 
-      // If ChallengeHoste orchestrator isn't reachable yet, fall back to direct dockerode for DOCKER runtimeType.
-      // For Proxmox runtimes (PROXMOX_CT / PROXMOX_VM) we do NOT silently swallow — re-throw so the caller
-      // gets a clear 500 with details instead of a silent DB write with broken data.
+      // Fall back to direct Docker if:
+      // 1. Challenge runtimeType is DOCKER (or undefined)
+      // 2. ChallengeHoste orchestrator returned HTTP 5xx (e.g. Proxmox down/misconfigured) or is unreachable (ECONNREFUSED/ETIMEDOUT)
+      //    AND the challenge has a dockerImage configured.
+      const isNetworkOrServerError =
+        err?.code === 'ECONNREFUSED' ||
+        err?.code === 'ETIMEDOUT' ||
+        err?.code === 'ENOTFOUND' ||
+        (err?.response?.status != null && err.response.status >= 500);
+
       const isDockerFallback =
         challenge.runtimeType === 'DOCKER' ||
         !challenge.runtimeType ||
-        // Also fall back to Docker when the error is a network-level failure (ECONNREFUSED / ETIMEDOUT)
-        // and the challenge could plausibly run in Docker (image is set)
-        (err?.code === 'ECONNREFUSED' || err?.code === 'ETIMEDOUT' || err?.code === 'ENOTFOUND');
+        (isNetworkOrServerError && Boolean(challenge.dockerImage));
 
       if (isDockerFallback && challenge.dockerImage) {
         console.warn('[ChallengeHostService] Falling back to direct Docker provisioning...');
