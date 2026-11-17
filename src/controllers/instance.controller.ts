@@ -174,15 +174,13 @@ export const stopMyInstance = async (req: Request, res: Response): Promise<void>
       containerName: instance.containerName,
     });
 
-    const updated = await prisma.instance.update({
+    // Permanently delete or mark stopped. Deleting allows user to immediately restart
+    // without hitting unique constraints (subdomain, containerName, vmid)
+    await prisma.instance.delete({
       where: { id: instance.id },
-      data: {
-        status: InstanceStatus.STOPPED,
-        stoppedAt: new Date(),
-      },
     });
 
-    res.status(200).json({ success: true, instance: updated });
+    res.status(200).json({ success: true, message: 'Instance stopped and removed' });
   } catch (err) {
     console.error('[InstanceController] stopMyInstance error:', err);
     res.status(500).json({ error: 'Failed to stop instance' });
