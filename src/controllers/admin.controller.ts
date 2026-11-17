@@ -554,7 +554,6 @@ export const deleteChallenge = async (req: Request, res: Response): Promise<void
 
 export const getProxmoxNodes = async (_req: Request, res: Response): Promise<void> => {
   try {
-    // Dynamically fetch live Proxmox nodes from ChallengeHoste orchestrator
     const response = await fetch(`${challengeHostService['baseUrl']}/api/nodes`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -573,19 +572,54 @@ export const getProxmoxNodes = async (_req: Request, res: Response): Promise<voi
       }
     }
 
-    // Fallback list if orchestrator is initializing
     const nodes = [
-      { id: 'pms1', name: 'pms1 (Juice Shop / Challenge Hosts)', status: 'online' },
-      { id: 'pms2', name: 'pms2 (Platform Core & ChallengeHoste)', status: 'online' },
-      { id: 'pms3', name: 'pms3 (Wazuh SIEM Security)', status: 'online' },
+      { id: 'pms1', name: 'pms1 (online)', status: 'online' },
+      { id: 'pms2', name: 'pms2 (online)', status: 'online' },
+      { id: 'pms3', name: 'pms3 (online)', status: 'online' },
     ];
     res.status(200).json(nodes);
   } catch (err) {
     const nodes = [
-      { id: 'pms1', name: 'pms1 (Primary Node)', status: 'online' },
-      { id: 'pms2', name: 'pms2 (Secondary Node)', status: 'online' },
-      { id: 'pms3', name: 'pms3 (Security Node)', status: 'online' },
+      { id: 'pms1', name: 'pms1 (online)', status: 'online' },
+      { id: 'pms2', name: 'pms2 (online)', status: 'online' },
+      { id: 'pms3', name: 'pms3 (online)', status: 'online' },
     ];
     res.status(200).json(nodes);
+  }
+};
+
+export const getProxmoxTemplates = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const response = await fetch(`${challengeHostService['baseUrl']}/api/templates`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (response.ok) {
+      const templates = await response.json();
+      res.status(200).json(templates);
+      return;
+    }
+    res.status(200).json([]);
+  } catch (err) {
+    res.status(200).json([]);
+  }
+};
+
+export const getProxmoxStorages = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const response = await fetch(`${challengeHostService['baseUrl']}/api/storages`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (response.ok) {
+      const storages = await response.json();
+      res.status(200).json(storages);
+      return;
+    }
+    res.status(200).json([{ storage: 'TrueNas' }, { storage: 'local-lvm' }, { storage: 'local' }]);
+  } catch (err) {
+    res.status(200).json([{ storage: 'TrueNas' }, { storage: 'local-lvm' }, { storage: 'local' }]);
   }
 };
